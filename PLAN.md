@@ -135,6 +135,29 @@ not repository provisioning commits and not work performed by this plan.
    required by the actual selected checks from their declared configuration.
    Report failures honestly and retain diagnostics.
 
+## Focused follow-up — native ClickHouse configuration permissions
+
+Preserve the application repairs and normal checks. For a native server running
+without root, the packaged XML's data and log paths must be writable before
+configuration preprocessing. Command-line overrides alone do not establish this
+requirement. The packaged configuration also declares a custom disk cache path
+separately from the main data directory.
+
+Make one documentation commit in `CONTRIBUTING.md` explaining the native-server
+path requirement and `users.xml` resolution. Keep environment-specific service
+configuration outside the application repository. In the external setup
+proposal, generate the complete writable XML before the managed foreground
+server starts, retaining the required database service and failure propagation.
+Use the existing pinned binary and packaged users configuration.
+
+Focused verification: preprocess the generated configuration with ClickHouse's
+`extract-from-config`; inspect data, cache, log, access and users paths; exercise
+temporary writable storage and failure on unavailable configuration or unwritable
+storage. These checks establish configuration preparation only. Managed service
+readiness, real preview startup, Geo lookup and normal validation still require
+the owning workflow. Do not start a replacement service or claim runtime
+acceptance from static configuration checks.
+
 ## Acceptance and later delivery
 
 - R1: record successful real preview startup and HTTP readiness, with startup

@@ -16,6 +16,14 @@ Make sure Docker, Elixir, Erlang and Node.js are all installed on your developme
    Database creation and tests require ClickHouse as well as PostgreSQL;
    `mix setup` does not start these services. See `make clickhouse-prod` or
    `.github/workflows/elixir.yml` for the pinned ClickHouse version.
+
+   When running the native ClickHouse server without root, use a configuration
+   file whose data and log paths are writable by the server user. The packaged
+   configuration uses `/var/lib/clickhouse` and `/var/log/clickhouse-server`;
+   update these paths in the XML before startup, including cache, temporary,
+   user-file, schema, and access-directory paths. Command-line path overrides
+   alone can leave configuration preprocessing using the packaged data path.
+   Keep `users.xml` resolvable from the selected configuration file as well.
 2. You can set up everything with `make install`, alternatively run each command separately:
     1. Run `mix deps.get`. This will download the required Elixir dependencies.
     2. Run `mix ecto.create`. This will create the required databases in both Postgres and Clickhouse.
