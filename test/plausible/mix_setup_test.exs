@@ -5,5 +5,8 @@ defmodule Plausible.MixSetupTest do
     setup_tasks = Mix.Project.config()[:aliases][:setup]
 
     assert "download_country_database" in setup_tasks
+
+    assert Enum.find_index(setup_tasks, &(&1 == "download_country_database")) <
+             Enum.find_index(setup_tasks, &(&1 == "ecto.setup"))
   end
 end

@@ -32,12 +32,16 @@ defmodule Mix.Tasks.DownloadCountryDatabase do
           res
       end
 
-    if res.status_code == 200 do
-      File.mkdir("priv/geodb")
-      File.write!("priv/geodb/dbip-country.mmdb.gz", res.body)
-      Logger.notice("Downloaded and saved the database successfully")
-    else
-      Logger.error("Unable to download and save the database. Response: #{inspect(res)}")
-    end
+    File.mkdir("priv/geodb")
+    File.write!("priv/geodb/dbip-country.mmdb.gz", response_body!(res))
+    Logger.notice("Downloaded and saved the database successfully")
+  end
+
+  @doc false
+  def response_body!(%HTTPoison.Response{status_code: 200, body: body}), do: body
+
+  def response_body!(%HTTPoison.Response{status_code: status}) do
+    Logger.error("Unable to download the geolocation database. HTTP status: #{status}")
+    Mix.raise("Unable to download the geolocation database (HTTP status #{status})")
   end
 end
