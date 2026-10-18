@@ -38,6 +38,48 @@ parsed its local configuration with HTTP port 8123. No ClickHouse server was
 started outside the managed lifecycle, so database creation and preview readiness
 remain unverified in this implementation stage.
 
+## Fresh trial follow-up (revision 1)
+
+7. Preserve the existing application fixes and tests. Reconcile the fresh trial
+   reporting successful installs/services followed by PostgreSQL 3D000 for
+   `plausible_dev`, ClickHouse Code 81 for `plausible_events_db`, and a
+   `Plausible.Session.Salts` child startup failure. Document database initialization
+   separately from service readiness and propose the missing database setup phase
+   outside the repository. Keep publication and validation with the harness.
+
+The report URL on localhost:4000 was unreachable in this implementation session
+(connection refused); the operator-supplied recorded diagnostics are the trial
+evidence. No preview-server log is available in this checkout. Current ClickHouse
+logs are empty and a bounded `/ping` request again returned connection refused;
+this is current workspace evidence, not proof of the earlier trial's service state.
+
+Source inspection confirms that `:ecto_repos` includes both repositories and
+Ecto's create task invokes each adapter's storage creation and raises on failure.
+The ClickHouse adapter creates the configured database through an unscoped
+connection. `Session.Salts.init/1` immediately queries the PostgreSQL `salts`
+table. Therefore database creation and migrations must precede preview startup,
+even when service health checks pass. No runtime startup behavior needs changing.
+The contributor instructions now explain that lifecycle and place geolocation
+installation before the application-starting seed command.
+
+Focused checks on 2026-10-18: `mix deps.compile file_system` exited 0 in dev;
+`MIX_ENV=test mix deps.compile file_system --force` compiled all seven files and
+exited 0. The attempt-11 excerpt has no terminal Mix error and does not establish
+a current `file_system` defect; neither dependency nor normal checks were removed.
+`mix ecto.create --no-compile` created the PostgreSQL database, then exited 1
+for ClickHouse with `%Mint.TransportError{reason: :econnrefused}`. This verifies
+that the real setup task retains failure reporting when a required service is
+unavailable; it does not verify complete database initialization or startup.
+`MIX_ENV=dev mix do ecto.create + ecto.migrate` also exited 1 for the unavailable
+ClickHouse service after reporting the PostgreSQL database already exists. The
+create failure correctly prevents migration from running. No managed service
+was replaced and no full validation or precommit suite was run.
+
+The external setup proposal retains the previously proposed managed ClickHouse
+installation/service and adds development database creation and migration to
+`recipes.db_setup`, after managed services are available. It is a proposal for
+fresh verification, not an adopted setup or a claimed passing preview.
+
 ## Verification and delivery boundary
 
 Use bounded inspection and focused dependency checks during implementation.

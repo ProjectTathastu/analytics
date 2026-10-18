@@ -20,16 +20,32 @@ Make sure Docker, Elixir, Erlang and Node.js are all installed on your developme
     1. Run `mix deps.get`. This will download the required Elixir dependencies.
     2. Run `mix ecto.create`. This will create the required databases in both Postgres and Clickhouse.
     3. Run `mix ecto.migrate` to build the database schema.
-    4. Run `mix run priv/repo/seeds.exs` to seed the database. Check the [Seeds](#Seeds) section for more.
-    5. Run `npm ci --prefix assets` to install the required client-side dependencies.
-    6. Run `npm ci --prefix tracker` to install the required tracker dependencies.
-    7. Run `mix assets.setup` to install Tailwind and Esbuild
-    8. Run `npm run deploy --prefix tracker` to generate tracker files in `priv/tracker/js`
-    9. Run `mix download_country_database` to fetch the geolocation database (`mix setup` also runs this task).
+    4. Run `mix download_country_database` to fetch the geolocation database before starting the application or running seeds (`mix setup` also runs this task).
+    5. Run `mix run priv/repo/seeds.exs` to seed the database. Check the [Seeds](#Seeds) section for more.
+    6. Run `npm ci --prefix assets` to install the required client-side dependencies.
+    7. Run `npm ci --prefix tracker` to install the required tracker dependencies.
+    8. Run `mix assets.setup` to install Tailwind and Esbuild
+    9. Run `npm run deploy --prefix tracker` to generate tracker files in `priv/tracker/js`
 3. Run `make server` or `mix phx.server` to start the Phoenix server.
 4. The system is now available on `localhost:8000`.
 
 The application requires a geolocation database at startup. The default setup downloads the public DB-IP Country Lite database and does not require a MaxMind credential. If you configure `IP_GEOLOCATION_DB` or `GEOLITE2_COUNTRY_DB` to use a local database, provide a real database file at that path. If you configure MaxMind instead, provide a genuine `MAXMIND_LICENSE_KEY`.
+
+### Database initialization failures
+
+Starting PostgreSQL and ClickHouse does not create the application databases or
+schema. Before starting the server, run `mix do ecto.create + ecto.migrate` with
+the same environment and database connection settings as the server. Both
+repositories are declared in `config/config.exs`, so these tasks prepare both
+PostgreSQL and ClickHouse. Repeat this step when using fresh service storage.
+
+PostgreSQL `invalid_catalog_name` for `plausible_dev` and ClickHouse
+`UNKNOWN_DATABASE` for `plausible_events_db` indicate that the configured
+databases do not exist. A subsequent `Plausible.Session.Salts` startup failure
+can follow because it reads and writes the PostgreSQL `salts` table during
+initialization. Fix database creation and migrations before retrying startup;
+service health checks alone do not establish application readiness. If database
+creation fails with connection refused, first restore the corresponding service.
 
 ### Seeds
 
