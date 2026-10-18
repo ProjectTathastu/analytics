@@ -31,6 +31,22 @@ Make sure Docker, Elixir, Erlang and Node.js are all installed on your developme
 
 The application requires a geolocation database at startup. The default setup downloads the public DB-IP Country Lite database and does not require a MaxMind credential. If you configure `IP_GEOLOCATION_DB` or `GEOLITE2_COUNTRY_DB` to use a local database, provide a real database file at that path. If you configure MaxMind instead, provide a genuine `MAXMIND_LICENSE_KEY`.
 
+### Tracker compiler startup failures
+
+`mix setup` does not install either npm project's dependencies. Install both
+lockfiles with `npm ci --prefix assets` and `npm ci --prefix tracker` before
+starting Phoenix, using the Node.js version in `.tool-versions`. Phoenix runs
+`npm run deploy` from the `tracker` directory; its compiler requires `@swc/core`
+and its native platform binding.
+
+If the watcher reports `ERR_MODULE_NOT_FOUND` for `@swc/core`, check that the
+tracker installation completed successfully and that `tracker/node_modules`
+persists in the workspace where Phoenix starts. Run
+`node --test tracker/compiler/startup.test.js` there to check compiler dependency
+loading, then `npm run deploy --prefix tracker` to verify the actual build before
+retrying Phoenix. Keep installation and build failures visible; a successful
+dependency probe alone does not establish application or HTTP readiness.
+
 ### Database initialization failures
 
 Starting PostgreSQL and ClickHouse does not create the application databases or

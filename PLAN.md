@@ -154,3 +154,39 @@ summarize actual verification evidence and remaining limitations, then prepare
 an open PR in `ProjectTathastu/analytics` on the preserved branch (or emit a
 compare URL if no GitHub token is bound). Leave it unmerged. This stage creates
 only PLAN.md and performs no implementation, commit, push, or PR operation.
+
+## Implementation record — revision 2
+
+The implementation stage preserved all eight existing repair commits and saved
+the untracked triage notes at `/tmp/analytics-startup-evidence/TRIAGE.md` outside
+the source tree. Contributor guidance now documents the tracker installation
+boundary and the actual compiler probe/build sequence without changing packages,
+watchers, geolocation, normal checks, or runtime failure handling.
+
+Focused verification on 2026-10-18 used the declared Node 24.17.0 with npm
+11.13.0. Both `npm ci --prefix assets` and `npm ci --prefix tracker` exited 0;
+`node --test tracker/compiler/startup.test.js` passed its one test, and
+`npm run deploy --prefix tracker` exited 0 after compiling all 1,028 variants.
+The deploy log is retained outside Git at
+`/tmp/analytics-startup-evidence/tracker-deploy.log`. Generated tracker outputs
+remain ignored build artifacts; manifests and lockfiles did not change.
+
+Bounded inspection again found no ClickHouse process/listener on 8123 or preview
+server log. `/ping` and the exact report URL both refused connections. This
+corroborates the current missing service, but cannot reconstruct attempt 12's
+07:06:59–07:07:05 window or the fresh trial's truncated startup output. The
+ClickHouse adapter's `storage_up/1` connects before executing `CREATE DATABASE`
+and propagates connection failure; both repositories remain required. No
+application workaround or weakened readiness check is justified.
+
+The declared Node toolchain and official ClickHouse 25.11.5.8 binary were
+installed; its version was confirmed without starting an unmanaged service.
+A portable external setup proposal accompanies the final commit for managed
+ClickHouse and explicit npm installation/build. Its service lifecycle and fresh
+workspace behavior remain for the owning setup workflow to verify. The saved
+setup/check definitions are not exposed through an available owning interface
+in this session; their absence from the repository is not a missing prerequisite.
+Configured validation, database creation/migration, Phoenix startup, and
+publication were left to Replicorg as required by this implementation stage.
+R1, R2's preview lookup, and R4 therefore remain unproven; no passing preview,
+successful full validation, or published PR is claimed.
