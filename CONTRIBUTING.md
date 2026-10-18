@@ -11,6 +11,11 @@ Make sure Docker, Elixir, Erlang and Node.js are all installed on your developme
 ### Start the environment
 
 1. Run both `make postgres` and `make clickhouse`.
+   Wait for both services to accept connections before proceeding. For local
+   ClickHouse, `curl --fail http://127.0.0.1:8123/ping` should return `Ok.`.
+   Database creation and tests require ClickHouse as well as PostgreSQL;
+   `mix setup` does not start these services. See `make clickhouse-prod` or
+   `.github/workflows/elixir.yml` for the pinned ClickHouse version.
 2. You can set up everything with `make install`, alternatively run each command separately:
     1. Run `mix deps.get`. This will download the required Elixir dependencies.
     2. Run `mix ecto.create`. This will create the required databases in both Postgres and Clickhouse.
