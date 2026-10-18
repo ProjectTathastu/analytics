@@ -20,9 +20,11 @@ Make sure Docker, Elixir, Erlang and Node.js are all installed on your developme
     6. Run `npm ci --prefix tracker` to install the required tracker dependencies.
     7. Run `mix assets.setup` to install Tailwind and Esbuild
     8. Run `npm run deploy --prefix tracker` to generate tracker files in `priv/tracker/js`
-    9. Run `mix download_country_database` to fetch geolocation database
+    9. Run `mix download_country_database` to fetch the geolocation database (`mix setup` also runs this task).
 3. Run `make server` or `mix phx.server` to start the Phoenix server.
 4. The system is now available on `localhost:8000`.
+
+The application requires a geolocation database at startup. The default setup downloads the public DB-IP Country Lite database and does not require a MaxMind credential. If you configure `IP_GEOLOCATION_DB` or `GEOLITE2_COUNTRY_DB` to use a local database, provide a real database file at that path. If you configure MaxMind instead, provide a genuine `MAXMIND_LICENSE_KEY`.
 
 ### Seeds
 
