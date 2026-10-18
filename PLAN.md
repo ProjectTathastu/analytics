@@ -1,90 +1,156 @@
-# Startup repair plan
+# Preview startup repair plan — revision 2
 
-Scope: restore a real development preview using the application's declared
-dependencies, preserving production behavior, geolocation, and normal checks.
-Do not add provider-specific provisioning or substitute test data for preview data.
+## Scope and preserved work
 
-## Existing focused commits
+This is a plan only. Implementation, setup adoption, runtime verification, and
+publication belong to later stages. Do not merge the application PR. Preserve
+branch `fix/diagnose-failed-startup-shown-6zng` at `ca45221` and the untracked
+`TRIAGE.md`; do not reset or replace unpublished work.
 
-1. Add regression coverage requiring geolocation download before database setup.
-2. Include `download_country_database` in `mix setup` before `ecto.setup`.
-3. Document the real geolocation database and optional MaxMind credential.
-4. Fail the download task on unsuccessful HTTP responses instead of saving errors.
-5. Verify geolocation lookup through the application's configured database.
+The checkout contains eight repair commits after `d44e104`, rather than the seven
+mentioned in TRIAGE.md: `ab5ca29`, `5ab1b4a`, `03e139a`, `dfb1b35`, `438907a`,
+`9bb8fd8`, `652ed24`, and `ca45221`. They cover geolocation setup and lookup,
+download failure reporting, service/database initialization documentation, and
+the tracker compiler dependency readiness regression. Retain these changes and
+the normal checks. No FEATURE.md was found; inspect the existing setup, Geo,
+download-task, and tracker startup regression tests during implementation.
 
-These commits survived in this checkout through `438907a`.
+## Evidence and diagnosis
 
-## Current correction
+The latest operator-reported trial is
+`a030eac0-bfa6-4c4e-888a-af61dd4fb6cd`, lasting 781 seconds. Installs and required
+settings passed; supporting services passed in 6 seconds; application startup
+failed its healthcheck after 2m30s; normal checks never ran. Output showed both
+application databases created and migration activity, followed by repeated
+Phoenix tracker watcher failures: `ERR_MODULE_NOT_FOUND` importing `@swc/core`
+from `tracker/compiler/index.js` on Node 24.17.0. Five consecutive log polls
+failed and 1,501,571 middle bytes were not retained. This differs from the older
+geolocation failure and subsequent missing-database report. Neither watcher
+errors nor partial migration output proves the cause of the HTTP healthcheck
+failure or complete database initialization.
 
-6. Diagnose the database connection failure before changing runtime configuration.
-   Document ClickHouse readiness and restore the missing managed service through
-   an external portable setup proposal. Keep database creation, migrations, and
-   startup failure reporting intact.
+A bounded request to the exact report URL on localhost:4000 returned connection
+refused during this planning stage. Report details above are supplied evidence,
+not independently retrieved logs. Current workspace inspection found no tracker
+SWC directory and no assets installed lockfile; this does not establish the
+filesystem state of the trial.
 
-Inspection on 2026-10-18 found no ClickHouse executable, process, listener on
-8123, or service log in the fresh workspace. A bounded request to
-`http://127.0.0.1:8123/ping` failed with connection refused. This corroborates
-the reported `Plausible.IngestRepo` creation failure; it does not establish
-the state of services during the earlier validation window.
+`config/dev.exs` runs `npm run deploy` with `tracker` as its working directory.
+The compiler statically imports `@swc/core`, already a required dependency locked
+at 1.11.24 in `tracker/package-lock.json`. `.tool-versions` and tracker CI require
+Node 24.17.0. No new dependency declaration, Node downgrade, or watcher bypass is
+justified. `CONTRIBUTING.md`, Makefile, Dockerfile, and CI install assets and
+tracker separately and build the tracker. `mix setup` downloads Geo data and
+initializes databases but does not install these npm packages; `assets.setup`
+installs Tailwind and Esbuild only.
 
-`config/.env.dev` and `config/.env.test` declare local ClickHouse URLs on
-8123. `Makefile` starts ClickHouse separately, and `.github/workflows/elixir.yml`
-uses ClickHouse 25.11.5.8 and waits for `/ping` before database creation.
+Runtime configuration defaults to a real DB-IP Country Lite download, which
+requires network access but no MaxMind license. An explicitly configured local
+Geo database must exist and load; MaxMind selection requires a genuine license
+and access to that service. PostgreSQL and ClickHouse must be available and both
+application databases migrated before startup. Existing documentation and CI
+identify these services; CI pins PostgreSQL 18 and ClickHouse 25.11.5.8. Do not
+substitute fake Geo data, invented credentials, mocks, or disabled features.
 
-Focused implementation checks downloaded the real DB-IP Country Lite database,
-loaded it through `Plausible.Geo.load_db/1`, and resolved `216.160.83.56` to
-`US`. ClickHouse's official 25.11.5.8 binary reported the expected version and
-parsed its local configuration with HTTP port 8123. No ClickHouse server was
-started outside the managed lifecycle, so database creation and preview readiness
-remain unverified in this implementation stage.
+## Logically sequenced implementation commits
 
-## Fresh trial follow-up (revision 1)
+### Commit 1 — Document tracker dependency readiness before Phoenix startup
 
-7. Preserve the existing application fixes and tests. Reconcile the fresh trial
-   reporting successful installs/services followed by PostgreSQL 3D000 for
-   `plausible_dev`, ClickHouse Code 81 for `plausible_events_db`, and a
-   `Plausible.Session.Salts` child startup failure. Document database initialization
-   separately from service readiness and propose the missing database setup phase
-   outside the repository. Keep publication and validation with the harness.
+Rationale: retain the existing application repairs and make the remaining setup
+boundary explicit for all developers. A successful install phase cannot prove
+that tracker dependencies exist in the later startup workspace. The repository
+already declares the dependency and contains the regression probe; documentation
+should explain how to verify that requirement without changing runtime behavior
+or adding provider-specific provisioning.
 
-The report URL on localhost:4000 was unreachable in this implementation session
-(connection refused); the operator-supplied recorded diagnostics are the trial
-evidence. No preview-server log is available in this checkout. Current ClickHouse
-logs are empty and a bounded `/ping` request again returned connection refused;
-this is current workspace evidence, not proof of the earlier trial's service state.
+Files to touch:
+- `CONTRIBUTING.md`: add a concise tracker startup troubleshooting paragraph near
+  the existing setup sequence. Explain that both npm projects need installation,
+  that `mix setup` alone does not install them, and that a missing SWC package
+  should be investigated as an installation/persistence failure.
+- No package manifest, lockfile, Phoenix watcher, Geo configuration, or existing
+  test changes are planned on present evidence.
 
-Source inspection confirms that `:ecto_repos` includes both repositories and
-Ecto's create task invokes each adapter's storage creation and raises on failure.
-The ClickHouse adapter creates the configured database through an unscoped
-connection. `Session.Salts.init/1` immediately queries the PostgreSQL `salts`
-table. Therefore database creation and migrations must precede preview startup,
-even when service health checks pass. No runtime startup behavior needs changing.
-The contributor instructions now explain that lifecycle and place geolocation
-installation before the application-starting seed command.
+Verification:
+- Follow the documented commands in a fresh implementation workspace using the
+  declared toolchain: `npm ci --prefix assets`, `npm ci --prefix tracker`,
+  `node --test tracker/compiler/startup.test.js`, then
+  `npm run deploy --prefix tracker`.
+- The existing regression exercises the actual npm entry point and static
+  imports without writing generated assets. Full deploy must also complete and
+  produce usable tracker artifacts; the help probe alone is insufficient.
+- Review the diff for provider-specific configuration, feature bypasses, changed
+  lockfiles, and accidental generated artifacts. Preserve existing failures and
+  nonzero exit statuses.
 
-Focused checks on 2026-10-18: `mix deps.compile file_system` exited 0 in dev;
-`MIX_ENV=test mix deps.compile file_system --force` compiled all seven files and
-exited 0. The attempt-11 excerpt has no terminal Mix error and does not establish
-a current `file_system` defect; neither dependency nor normal checks were removed.
-`mix ecto.create --no-compile` created the PostgreSQL database, then exited 1
-for ClickHouse with `%Mint.TransportError{reason: :econnrefused}`. This verifies
-that the real setup task retains failure reporting when a required service is
-unavailable; it does not verify complete database initialization or startup.
-`MIX_ENV=dev mix do ecto.create + ecto.migrate` also exited 1 for the unavailable
-ClickHouse service after reporting the PostgreSQL database already exists. The
-create failure correctly prevents migration from running. No managed service
-was replaced and no full validation or precommit suite was run.
+Do not manufacture another application commit to compensate for an external
+recipe failure. If the following runtime investigation identifies an additional
+repository defect, define a focused follow-up commit with its demonstrated
+trigger, exact affected files, regression, and verification before implementing
+it. Current evidence does not justify changes to unrelated installation
+verification modules suggested by the path hints.
 
-The external setup proposal retains the previously proposed managed ClickHouse
-installation/service and adds development database creation and migration to
-`recipes.db_setup`, after managed services are available. It is a proposal for
-fresh verification, not an adopted setup or a claimed passing preview.
+## External setup and runtime verification sequence
 
-## Verification and delivery boundary
+These steps are validation and setup work for the later implementation stage,
+not repository provisioning commits and not work performed by this plan.
 
-Use bounded inspection and focused dependency checks during implementation.
-Leave configured deterministic checks, full validation, preview startup, and
-publication to the harness. Do not claim runtime acceptance until those steps
-are observed. Keep services managed by the harness; propose their configuration
-outside the repository. Commit focused source/documentation changes with a clean
-working tree; do not push or merge.
+1. Reconcile the actual saved setup recipe and fresh-trial commands through the
+   owning setup interface. Check installation prefix, working directory,
+   command exit status, toolchain, and persistence from install to startup.
+   Inspect only non-secret installation options relevant to omitted packages,
+   optional native bindings, or cleanup. Do not inspect credential contents or
+   infer missing prerequisites from absent `.sahr/setup.yml` or home metadata.
+   Keep any proposed recipe correction outside this repository; the suggestion
+   remains unadopted until the external workflow adopts it.
+2. Install both lockfiles in the workspace used for startup, retaining npm
+   failure output and exit status. Run the existing startup probe and real
+   tracker deployment there before Phoenix. Distinguish a missing `@swc/core`
+   package from a missing platform binding; investigate the observed error,
+   without speculative lockfile edits or suppressed failures.
+3. Confirm real PostgreSQL and ClickHouse readiness, then run
+   `MIX_ENV=dev mix do ecto.create + ecto.migrate` with the same connection
+   settings as startup. Retain terminal results for both repositories. Download
+   the default Geo database with `mix download_country_database`, or supply the
+   genuinely configured local file/MaxMind prerequisite. Install declared asset
+   build tools with `mix assets.setup`. Stop on failures rather than marking
+   the phase ready.
+4. Run the normal preview startup command with its intended environment and
+   capture complete stdout/stderr outside the checkout, command exit status,
+   elapsed time, listener address, and HTTP healthcheck response. Retain logs
+   independently of a polling receipt so truncation cannot hide the first
+   failure. Confirm the tracker watcher builds successfully and representative
+   dashboard/tracker resources load. If the healthcheck still fails, diagnose
+   the first actual application or HTTP failure before proposing another fix;
+   merely extending a timeout is not proof of readiness.
+5. Observe Geo loading through the application's configured real data source and
+   a representative lookup (the existing test uses `216.160.83.56` -> `US`).
+   Verify the preview configuration as well as the test environment: a test
+   fixture or passing test in isolation does not prove preview Geo readiness.
+6. After preview startup succeeds, let the owning validation workflow execute
+   its unchanged normal deterministic checks and record their exact commands,
+   results, and report. Run the repository's relevant setup/download/Geo tests
+   and normal applicable Elixir and JavaScript checks; do not replace the saved
+   checks with the focused tracker probe. Provision any additional services
+   required by the actual selected checks from their declared configuration.
+   Report failures honestly and retain diagnostics.
+
+## Acceptance and later delivery
+
+- R1: record successful real preview startup and HTTP readiness, with startup
+  logs showing no Geo database not-found error or Geo.load_db timeout/MatchError.
+- R2: record a successful lookup against the preview's configured real Geo
+  source and review the diff for preserved production behavior and features.
+- R3: identify actual required services/credentials from configuration and
+  observed failures. The default DB-IP path needs no MaxMind credential; request
+  a genuine prerequisite only if the selected configuration actually requires it.
+- R4: retain the post-startup normal-check report proving checks executed and
+  passed. Install/service phase success and focused tests cannot satisfy R4.
+- R5: review all changed files to ensure no provider-specific preview provisioning
+  or fabricated readiness was introduced. Keep setup recipes external.
+
+No runtime acceptance is claimed in this planning stage. Later delivery should
+summarize actual verification evidence and remaining limitations, then prepare
+an open PR in `ProjectTathastu/analytics` on the preserved branch (or emit a
+compare URL if no GitHub token is bound). Leave it unmerged. This stage creates
+only PLAN.md and performs no implementation, commit, push, or PR operation.
