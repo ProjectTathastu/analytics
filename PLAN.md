@@ -334,3 +334,30 @@ normal four-case full suite, connection errors, existing assertions and
 production behavior remain intact. No runtime/application source changes were
 needed in this revision. Scratch diagnostics and the setup receipt stay outside
 Git; ignored generated output is retained for the owning validation stage.
+
+## Focused follow-up — distinguish late service and browser failures
+
+The late-dismissal regression must exercise the real producer/consumer contract.
+`VerifyInstallation.handle_browserless_response/3` maps an HTTP 200 body with
+`data.completed: false` to `:browserless_client_error`. Arbitrary browser errors
+use the existing unhandled-installation interpretation; they do not imply the
+Browserless service was unavailable. An HTTP 503 without completed diagnostics
+maps to `:bad_browserless_response`, whose interpretation reports temporary
+service unavailability. The retry policy does not retry 503. Preserve both
+interpretations and their existing observability, rather than reclassifying
+production errors to satisfy a test fixture.
+
+Focused commit: update only the late-dismissal test's response construction to
+cover HTTP 200 success, HTTP 503 service unavailability, and the original HTTP
+200 browser error separately. Keep the response gate, in-progress assertion,
+dismissal/disconnect assertion, actual completion, hidden-banner assertion and
+onboarding expectations. Compare decoded heading text so HTML entity escaping
+cannot disguise the browser-error result. Restore the shared JSON stub's simple
+single-argument interface now that the gated test stubs whole HTTP responses.
+
+Verification: run the LiveView verification tests and existing verification
+observability tests with four cases. These exercise the real check pipeline and
+failure reporting without running the configured full validation. No application
+code, timeout, exclusions, managed services or setup commands change. Preserve
+the existing external setup proposal and update its receipt to the final commit;
+adoption, full validation and publication remain with the owning workflow.

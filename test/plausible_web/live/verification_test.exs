@@ -291,37 +291,51 @@ defmodule PlausibleWeb.Live.VerificationTest do
       assert Repo.reload!(site).onboarding_status == :new_site
     end
 
-    for {outcome, completion_text, onboarding_status} <- [
-          {:success, "Tracking is active on your site", :verification_succeeded},
-          {:service_failure, "Our verification service is temporarily unavailable", :new_site}
+    for {outcome, http_status, completion_text, onboarding_status} <- [
+          {:success, 200, "Tracking is active on your site", :verification_succeeded},
+          {:service_failure, 503, "Our verification service is temporarily unavailable",
+           :new_site},
+          {:client_failure, 200, "We couldn't detect Plausible on your site", :new_site}
         ] do
       @tag :ee_only
       test "the dismissed flag keeps the banner hidden after a late #{outcome}",
            %{conn: conn, site: site} do
         stub_dns()
 
-        js_data =
+        response_body =
           case unquote(outcome) do
             :success ->
               %{
-                "completed" => true,
-                "trackerIsInHtml" => true,
-                "plausibleIsOnWindow" => true,
-                "plausibleIsInitialized" => true,
-                "testEvent" => %{
-                  "normalizedBody" => %{"domain" => site.domain},
-                  "responseStatus" => 200
+                "data" => %{
+                  "completed" => true,
+                  "trackerIsInHtml" => true,
+                  "plausibleIsOnWindow" => true,
+                  "plausibleIsInitialized" => true,
+                  "testEvent" => %{
+                    "normalizedBody" => %{"domain" => site.domain},
+                    "responseStatus" => 200
+                  }
                 }
               }
 
             :service_failure ->
-              %{"completed" => false, "error" => %{"message" => "service unavailable"}}
+              # An unavailable HTTP service is distinct from a function that
+              # ran successfully but reported a browser/page error in its data.
+              %{"error" => "service unavailable"}
+
+            :client_failure ->
+              %{
+                "data" => %{
+                  "completed" => false,
+                  "error" => %{"message" => "service unavailable"}
+                }
+              }
           end
 
         test_pid = self()
         response_ref = make_ref()
 
-        stub_verification_result(js_data, fn ->
+        Req.Test.stub(Plausible.InstallationSupport.Checks.VerifyInstallation, fn conn ->
           # Keep the actual check pending until dismissal. The monitor also
           # stops this process if the test exits before releasing the response.
           monitor = Process.monitor(test_pid)
@@ -331,6 +345,10 @@ defmodule PlausibleWeb.Live.VerificationTest do
             {:release_verification, ^response_ref} -> Process.demonitor(monitor, [:flush])
             {:DOWN, ^monitor, :process, ^test_pid, _reason} -> exit(:test_process_exited)
           end
+
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(unquote(http_status), Jason.encode!(response_body))
         end)
 
         {:ok, lv} = kick_off_live_verification(conn, site)
@@ -350,7 +368,7 @@ defmodule PlausibleWeb.Live.VerificationTest do
 
         assert eventually(fn ->
                  html = render(lv)
-                 {html =~ unquote(completion_text), html}
+                 {text_of_element(html, @heading) == unquote(completion_text), html}
                end)
 
         html = render(lv)
@@ -464,10 +482,8 @@ defmodule PlausibleWeb.Live.VerificationTest do
     Plug.Conn.put_private(conn, :launch_delay, 0)
   end
 
-  defp stub_verification_result(js_data, before_response \\ fn -> :ok end) do
+  defp stub_verification_result(js_data) do
     Req.Test.stub(Plausible.InstallationSupport.Checks.VerifyInstallation, fn conn ->
-      before_response.()
-
       conn
       |> put_resp_content_type("application/json")
       |> send_resp(200, Jason.encode!(%{"data" => js_data}))
