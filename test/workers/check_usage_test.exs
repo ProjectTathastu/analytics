@@ -1,7 +1,15 @@
 defmodule Plausible.Workers.CheckUsageTest do
   use Plausible.DataCase, async: true
   use Bamboo.Test
-  import Double
+
+  # Compile the mock once. Double compiles a fresh module inside every stub's
+  # synchronous registration call, making it depend on compiler latency.
+  defmodule BillingBehaviour do
+    @callback monthly_pageview_usage(Plausible.Teams.Team.t()) :: map()
+  end
+
+  Mox.defmock(__MODULE__.BillingMock, for: BillingBehaviour)
+  alias __MODULE__.BillingMock
 
   alias Plausible.Workers.CheckUsage
 
@@ -31,8 +39,8 @@ defmodule Plausible.Workers.CheckUsageTest do
          user: user
        } do
     usage_stub =
-      Plausible.Teams.Billing
-      |> stub(:monthly_pageview_usage, fn _user ->
+      BillingMock
+      |> Mox.stub(:monthly_pageview_usage, fn _user ->
         %{
           penultimate_cycle: %{date_range: @date_range, total: 11_000},
           last_cycle: %{date_range: @date_range, total: 11_000}
@@ -62,10 +70,42 @@ defmodule Plausible.Workers.CheckUsageTest do
     )
   end
 
+  test "does not silently use real billing when a mock response is missing", %{user: user} do
+    subscribe_to_plan(user, @paddle_id_10k,
+      last_bill_date: Date.shift(Date.utc_today(), day: -1),
+      status: :active
+    )
+
+    assert_raise Mox.UnexpectedCallError, fn -> CheckUsage.perform(nil, BillingMock) end
+    assert_no_emails_delivered()
+    assert Repo.reload(team_of(user)).grace_period == nil
+  end
+
+  test "propagates usage retrieval failures without sending email or starting a grace period", %{
+    user: user
+  } do
+    usage_stub =
+      Mox.stub(BillingMock, :monthly_pageview_usage, fn _team ->
+        raise "billing usage unavailable"
+      end)
+
+    subscribe_to_plan(user, @paddle_id_10k,
+      last_bill_date: Date.shift(Date.utc_today(), day: -1),
+      status: :active
+    )
+
+    assert_raise RuntimeError, "billing usage unavailable", fn ->
+      CheckUsage.perform(nil, usage_stub)
+    end
+
+    assert_no_emails_delivered()
+    assert Repo.reload(team_of(user)).grace_period == nil
+  end
+
   test "sends more than one email", %{user: user} do
     usage_stub =
-      Plausible.Teams.Billing
-      |> stub(:monthly_pageview_usage, fn _user ->
+      BillingMock
+      |> Mox.stub(:monthly_pageview_usage, fn _user ->
         %{
           penultimate_cycle: %{date_range: @date_range, total: 11_000},
           last_cycle: %{date_range: @date_range, total: 11_000}
@@ -100,8 +140,8 @@ defmodule Plausible.Workers.CheckUsageTest do
 
   test "sends emails to billing members if available", %{user: user} do
     usage_stub =
-      Plausible.Teams.Billing
-      |> stub(:monthly_pageview_usage, fn _user ->
+      BillingMock
+      |> Mox.stub(:monthly_pageview_usage, fn _user ->
         %{
           penultimate_cycle: %{date_range: @date_range, total: 11_000},
           last_cycle: %{date_range: @date_range, total: 11_000}
@@ -173,8 +213,8 @@ defmodule Plausible.Workers.CheckUsageTest do
         user: user
       } do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 9_000},
               last_cycle: %{date_range: @date_range, total: 11_000}
@@ -196,8 +236,8 @@ defmodule Plausible.Workers.CheckUsageTest do
         user: user
       } do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 10_999},
               last_cycle: %{date_range: @date_range, total: 11_000}
@@ -220,8 +260,8 @@ defmodule Plausible.Workers.CheckUsageTest do
              user: user
            } do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 11_000},
               last_cycle: %{date_range: @date_range, total: 11_000}
@@ -250,8 +290,8 @@ defmodule Plausible.Workers.CheckUsageTest do
         user: user
       } do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 11_000_000},
               last_cycle: %{date_range: @date_range, total: 11_000_000}
@@ -278,8 +318,8 @@ defmodule Plausible.Workers.CheckUsageTest do
           Plausible.Teams.start_grace_period(team_of(user))
 
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 11_000},
               last_cycle: %{date_range: @date_range, total: 11_000}
@@ -301,8 +341,8 @@ defmodule Plausible.Workers.CheckUsageTest do
         user: user
       } do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 11_000},
               last_cycle: %{date_range: @date_range, total: 11_000}
@@ -327,8 +367,8 @@ defmodule Plausible.Workers.CheckUsageTest do
 
       test "clears grace period when plan is applicable again", %{user: user} do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 11_000},
               last_cycle: %{date_range: @date_range, total: 11_000}
@@ -346,8 +386,8 @@ defmodule Plausible.Workers.CheckUsageTest do
         assert user |> team_of() |> Repo.reload() |> Plausible.Teams.GracePeriod.active?()
 
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 11_000},
               last_cycle: %{date_range: @date_range, total: 9_000}
@@ -367,8 +407,8 @@ defmodule Plausible.Workers.CheckUsageTest do
           Plausible.Teams.start_manual_lock_grace_period(team_of(user))
 
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 1_100_000},
               last_cycle: %{date_range: @date_range, total: 1_100_000}
@@ -394,8 +434,8 @@ defmodule Plausible.Workers.CheckUsageTest do
              user: user
            } do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 1_100_000},
               last_cycle: %{date_range: @date_range, total: 1_100_000}
@@ -429,8 +469,8 @@ defmodule Plausible.Workers.CheckUsageTest do
              user: user
            } do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 1_100_000},
               last_cycle: %{date_range: @date_range, total: 1_100_000}
@@ -466,8 +506,8 @@ defmodule Plausible.Workers.CheckUsageTest do
              user: user
            } do
         usage_stub =
-          Plausible.Teams.Billing
-          |> stub(:monthly_pageview_usage, fn _user ->
+          BillingMock
+          |> Mox.stub(:monthly_pageview_usage, fn _user ->
             %{
               penultimate_cycle: %{date_range: @date_range, total: 1_100_000},
               last_cycle: %{date_range: @date_range, total: 1_100_000}
@@ -576,8 +616,8 @@ defmodule Plausible.Workers.CheckUsageTest do
       user: user
     } do
       usage_stub =
-        Plausible.Teams.Billing
-        |> stub(:monthly_pageview_usage, fn _user ->
+        BillingMock
+        |> Mox.stub(:monthly_pageview_usage, fn _user ->
           %{
             penultimate_cycle: %{date_range: @date_range, total: 11_000},
             last_cycle: %{date_range: @date_range, total: 11_000}
@@ -602,8 +642,8 @@ defmodule Plausible.Workers.CheckUsageTest do
       user: user
     } do
       usage_stub =
-        Plausible.Teams.Billing
-        |> stub(:monthly_pageview_usage, fn _user ->
+        BillingMock
+        |> Mox.stub(:monthly_pageview_usage, fn _user ->
           %{
             penultimate_cycle: %{date_range: @date_range, total: 11_000},
             last_cycle: %{date_range: @date_range, total: 11_000}
@@ -622,8 +662,8 @@ defmodule Plausible.Workers.CheckUsageTest do
            user: user
          } do
       usage_stub =
-        Plausible.Teams.Billing
-        |> stub(:monthly_pageview_usage, fn _user ->
+        BillingMock
+        |> Mox.stub(:monthly_pageview_usage, fn _user ->
           %{
             penultimate_cycle: %{date_range: @date_range, total: 11_000},
             last_cycle: %{date_range: @date_range, total: 11_000}
