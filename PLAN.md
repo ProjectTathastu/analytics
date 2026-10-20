@@ -280,3 +280,57 @@ two commits. Full application checks were not run; managed ClickHouse still has
 no listener or captured service log in this workspace. No current observation
 reconstructs attempt 17 or supersedes the newer successful startup report.
 The final setup receipt proposes no changes to the saved settings.
+
+## Authorized revision 6 — restore dependency setup without application changes
+
+Preserve `c6fd0b1` and `084ef2d`, their assertions, and all earlier repairs.
+Attempt 19 failed during database creation, before application assertions. The
+operator identifies the restored workspace's stopped ClickHouse as the cause and
+supplies the previously startup-tested setup. Capture that setup externally for
+review against saved settings; keep service lifecycle under the managed runner.
+Do not introduce application provisioning, bypass connection failures, extend
+test timeouts, or run the configured full validation in this implementation turn.
+
+Focused work:
+
+1. Inspect current listener/process state and bounded available diagnostics.
+   Confirm whether the connection is refused before attributing a code defect.
+2. Exercise the supplied pinned ClickHouse installation and writable XML
+   preparation, npm installations, asset builds, and real country download.
+   Check configuration failure propagation without starting a replacement
+   service. Preserve build output as ignored artifacts and scratch evidence
+   outside the checkout.
+3. Recheck the two retained lifecycle repairs with focused probes and the real
+   country loader/lookup. Keep their scope distinct from application tests.
+4. Capture portable external recipes, foreground service command, database
+   preparation and preview settings for managed startup. Retain the normal Mix
+   suite with the authorized four-case concurrency. The owning runner must start
+   ClickHouse, execute application checks and record fresh acceptance evidence.
+
+Current inspection confirms PostgreSQL listening on 5432 and no ClickHouse
+listener on 8123; the HTTP ping refuses connections. No ClickHouse server log
+or preview server log is available here to reconstruct the earlier command
+window. No application code change is warranted by this dependency failure.
+The current tools expose no managed service restart operation; preparing its
+configuration does not establish running-service readiness. Publication remains
+with the later stage; do not push, open, or merge a PR from this session.
+
+Revision 6 focused results: the pinned ClickHouse binary/config installation,
+both `npm ci` commands, asset tool setup, real country download/gzip check,
+tracker deploy (1,028 variants) and `mix assets.build` completed successfully.
+The compiler startup probe passed. Five billing lifecycle probes and two
+response-gate probes passed against the retained test source. Writable XML
+checks passed for fresh storage, repeat preparation preserving existing data,
+and nonzero failure with unwritable storage, missing packaged XML or missing
+users XML. The actual Geo loader loaded the downloaded DB-IP Country Lite data
+and returned US for `216.160.83.56`. No placeholder data or credentials were used.
+
+The external setup capture includes the supplied operator recipes and managed
+foreground ClickHouse command. Shell syntax and patch structure were checked;
+no database preparation, managed service launch, Phoenix preview or full suite
+was executed here. Those commands require the managed lifecycle and remain for
+fresh verification; capture is a proposal rather than adoption or proof. The
+normal four-case full suite, connection errors, existing assertions and
+production behavior remain intact. No runtime/application source changes were
+needed in this revision. Scratch diagnostics and the setup receipt stay outside
+Git; ignored generated output is retained for the owning validation stage.
