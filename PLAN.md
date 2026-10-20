@@ -213,3 +213,56 @@ Configured validation, database creation/migration, Phoenix startup, and
 publication were left to Replicorg as required by this implementation stage.
 R1, R2's preview lookup, and R4 therefore remain unproven; no passing preview,
 successful full validation, or published PR is claimed.
+
+## Authorized revision 5 — deterministic test lifecycle repair
+
+The operator's latest fresh-master report supersedes the earlier startup
+failures: installation, assets/country data, isolated databases, migrations and
+preview readiness succeeded. The unchanged four-case full suite passed 6394 of
+6396 tests, with 69 existing exclusions; an earlier identical-source run passed
+all 6396. This is evidence of intermittency, not proof of an application defect.
+Preserve all existing repairs and normal checks; keep publication to the owning
+stage and leave the PR unmerged.
+
+Source inspection identifies two test lifecycle hazards to repair in focused
+commits, within the authorized nondeterminism investigation:
+
+1. `Double.stub/3` starts a new double for each billing stub and its synchronous
+   `{:allow, ...}` GenServer call invokes `Code.eval_string/1` to compile a new
+   module before replying. It therefore includes compiler/code-server latency in
+   the default five-second call deadline. Replace only this worker test's dynamic
+   doubles with a once-defined Mox module and process-owned responses. Preserve
+   every usage value, billing/email assertion and the two-call grace-period
+   transition. Include a missing-response failure assertion. This removes runtime
+   compilation from registration, without claiming to reproduce the original
+   timeout or increasing it.
+2. The late-update dismissal test starts checks with zero delay and immediately
+   successful HTTP responses, then expects an in-progress render. Completion and
+   that render race. Gate the real mocked HTTP response with a message handshake,
+   dismiss while it is pending, then release it and observe actual completion.
+   Cover late success and late service failure, preserving failure reporting and
+   hidden-banner assertions. Do not add sleeps or application-only test hooks.
+
+Focused verification may exercise the mock lifecycle independently with compiled
+Mox dependencies and parse/format the changed files. Do not run the configured
+Mix test alias or full validation. Application-level tests require managed
+ClickHouse; do not replace managed processes. On this turn, bounded inspection
+found no ClickHouse listener on 8123, no preview log or ClickHouse service log,
+and the report endpoint on 4000 refused connections. That cannot establish the
+cause of attempt 17 at its recorded timestamp. No connection workaround or new
+setup change is justified by those observations, especially given the newer
+successful preview report. Capture an empty setup patch if no settings change is
+needed; do not re-propose the older unadopted setup over newer operator evidence.
+Runtime acceptance and a passing full-suite report remain the owning workflow's
+responsibility and must not be inferred from these focused checks.
+
+Billing repair verification: a standalone probe loaded the actual test mock
+declaration and passed five focused lifecycle tests under the declared toolchain
+with four schedulers/cases: 400 response registrations/replacements across four
+independent owners, plus failure for an owner without a response. The initial
+probe using the shell's OTP 27/Elixir 1.19 could not load OTP 28 BEAM files; using
+`mise exec` selected the repository's OTP 28/Elixir 1.20 and passed. No dependency
+artifacts were rebuilt. Worker regressions additionally require missing responses
+and usage-retrieval errors to propagate before email/grace-period side effects.
+These database-dependent regressions remain for the owning validation stage;
+the standalone probe is not a full-suite or preview acceptance result.
