@@ -266,3 +266,17 @@ artifacts were rebuilt. Worker regressions additionally require missing response
 and usage-retrieval errors to propagate before email/grace-period side effects.
 These database-dependent regressions remain for the owning validation stage;
 the standalone probe is not a full-suite or preview acceptance result.
+
+Late-update repair verification: a standalone probe extracted the actual response
+handshake callback from the changed test. Both focused checks passed: the
+response remains blocked until its matching release (including rejection of an
+unrelated release), and a dead test owner terminates the pending callback. The
+source parses and formats under the declared Elixir toolchain and the diff passes
+whitespace checks. The retained LiveView regressions exercise the real check
+pipeline through Req.Test, then require the success/failure text, correct
+onboarding status, client disconnect event and hidden banner after completion.
+No production file, timeout, exclusion or configured check was changed by these
+two commits. Full application checks were not run; managed ClickHouse still has
+no listener or captured service log in this workspace. No current observation
+reconstructs attempt 17 or supersedes the newer successful startup report.
+The final setup receipt proposes no changes to the saved settings.

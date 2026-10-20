@@ -291,49 +291,72 @@ defmodule PlausibleWeb.Live.VerificationTest do
       assert Repo.reload!(site).onboarding_status == :new_site
     end
 
-    @tag :ee_only
-    test "the dismissed flag keeps the banner hidden even if a late update arrives while still connected",
-         %{conn: conn, site: site} do
-      stub_dns()
+    for {outcome, completion_text, onboarding_status} <- [
+          {:success, "Tracking is active on your site", :verification_succeeded},
+          {:service_failure, "Our verification service is temporarily unavailable", :new_site}
+        ] do
+      @tag :ee_only
+      test "the dismissed flag keeps the banner hidden after a late #{outcome}",
+           %{conn: conn, site: site} do
+        stub_dns()
 
-      stub_verification_result(%{
-        "completed" => true,
-        "trackerIsInHtml" => true,
-        "plausibleIsOnWindow" => true,
-        "plausibleIsInitialized" => true,
-        "testEvent" => %{
-          "normalizedBody" => %{
-            "domain" => site.domain
-          },
-          "responseStatus" => 200
-        }
-      })
+        js_data =
+          case unquote(outcome) do
+            :success ->
+              %{
+                "completed" => true,
+                "trackerIsInHtml" => true,
+                "plausibleIsOnWindow" => true,
+                "plausibleIsInitialized" => true,
+                "testEvent" => %{
+                  "normalizedBody" => %{"domain" => site.domain},
+                  "responseStatus" => 200
+                }
+              }
 
-      {:ok, lv} = kick_off_live_verification(conn, site)
+            :service_failure ->
+              %{"completed" => false, "error" => %{"message" => "service unavailable"}}
+          end
 
-      html = render(lv)
-      assert html =~ @in_progress_text
-      refute class_of_element(html, @banner) =~ "hidden"
+        test_pid = self()
+        response_ref = make_ref()
 
-      html = render_click(lv, "dismiss")
-      assert class_of_element(html, @banner) =~ "hidden"
+        stub_verification_result(js_data, fn ->
+          # Keep the actual check pending until dismissal. The monitor also
+          # stops this process if the test exits before releasing the response.
+          monitor = Process.monitor(test_pid)
+          send(test_pid, {:verification_waiting, response_ref, self()})
 
-      # This might look a bit counter-intuitive -- dismissing the banner
-      # closes the websocket connection and the LV process would normally
-      # die before the component gets notified of success.
+          receive do
+            {:release_verification, ^response_ref} -> Process.demonitor(monitor, [:flush])
+            {:DOWN, ^monitor, :process, ^test_pid, _reason} -> exit(:test_process_exited)
+          end
+        end)
 
-      # However, `Phoenix.LiveViewTest` can't simulate a real socket closing,
-      # so the process here just stays alive regardless. What this guards is
-      # the defensive `dismissed?` gate itself: if this process is ever still
-      # around when a late update arrives, for whatever reason, the banner
-      # must stay hidden.
-      assert eventually(fn ->
-               html = render(lv)
-               {html =~ "Tracking is active on your site", html}
-             end)
+        {:ok, lv} = kick_off_live_verification(conn, site)
+        assert_receive {:verification_waiting, ^response_ref, checks_pid}, 1000
 
-      html = render(lv)
-      assert class_of_element(html, @banner) =~ "hidden"
+        html = render(lv)
+        assert html =~ @in_progress_text
+        refute class_of_element(html, @banner) =~ "hidden"
+
+        html = render_click(lv, "dismiss")
+        assert class_of_element(html, @banner) =~ "hidden"
+        assert_push_event(lv, "disconnect-liveview", %{})
+
+        # LiveViewTest keeps the socket alive after the disconnect event. Let
+        # the real check finish now to exercise the defensive dismissed? gate.
+        send(checks_pid, {:release_verification, response_ref})
+
+        assert eventually(fn ->
+                 html = render(lv)
+                 {html =~ unquote(completion_text), html}
+               end)
+
+        html = render(lv)
+        assert class_of_element(html, @banner) =~ "hidden"
+        assert Repo.reload!(site).onboarding_status == unquote(onboarding_status)
+      end
     end
 
     @tag :ee_only
@@ -441,8 +464,10 @@ defmodule PlausibleWeb.Live.VerificationTest do
     Plug.Conn.put_private(conn, :launch_delay, 0)
   end
 
-  defp stub_verification_result(js_data) do
+  defp stub_verification_result(js_data, before_response \\ fn -> :ok end) do
     Req.Test.stub(Plausible.InstallationSupport.Checks.VerifyInstallation, fn conn ->
+      before_response.()
+
       conn
       |> put_resp_content_type("application/json")
       |> send_resp(200, Jason.encode!(%{"data" => js_data}))
